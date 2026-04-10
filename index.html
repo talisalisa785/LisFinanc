@@ -421,9 +421,10 @@
         <button type="button" class="btn-icon" style="color: var(--text-main); font-weight: bold; background: var(--surface); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);" onclick="app.closeModal('goal-modal')">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><polyline points="15 18 9 12 15 6"></polyline></svg> Voltar
         </button>
-        <h3 style="margin: 0; flex-grow: 1; text-align: center; padding-right: 80px;">Nova Meta</h3>
+        <h3 id="goal-modal-title" style="margin: 0; flex-grow: 1; text-align: center; padding-right: 80px;">Nova Meta</h3>
       </div>
       <form id="goal-form" onsubmit="app.handleCreateGoal(event)">
+        <input type="hidden" id="goal-id">
         <div class="form-grid">
           <div class="input-group full-width">
             <label>Nome da Caixinha (Ex: Carro, Reserva 2026)</label>

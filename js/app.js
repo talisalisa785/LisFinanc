@@ -553,7 +553,12 @@ const app = {
   closeModal(id) {
     document.getElementById(id).classList.remove('active');
     if(id === 'transaction-modal') document.getElementById('transaction-form').reset();
-    document.getElementById('trx-id').value = '';
+    if(id === 'goal-modal') {
+      document.getElementById('goal-form').reset();
+      document.getElementById('goal-modal-title').textContent = 'Nova Meta';
+    }
+    const hiddenId = document.getElementById(id).querySelector('input[type="hidden"]');
+    if(hiddenId) hiddenId.value = '';
   },
 
   async editModal(id) {
@@ -743,7 +748,11 @@ const app = {
          const isDone = perc >= 100;
          list.innerHTML += `
            <div class="card glass-panel" style="display: flex; flex-direction: column; justify-content: space-between; border-top: 4px solid ${isDone ? 'var(--success)' : 'var(--primary)'}">
-             <div>
+             <div style="position: relative;">
+               <div style="position: absolute; top: -5px; right: -5px; display: flex; gap: 5px;">
+                 <button class="btn-icon" onclick="app.editGoal('${doc.id}')" title="Editar Meta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                 <button class="btn-icon" onclick="app.deleteGoal('${doc.id}')" title="Excluir Meta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--danger)" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+               </div>
                <h3 style="margin-bottom: 5px">${d.name}</h3>
                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
                  <span>Meta: R$ ${d.target.toFixed(2)}</span>
@@ -767,6 +776,7 @@ const app = {
 
   async handleCreateGoal(e) {
     e.preventDefault();
+    const id = document.getElementById('goal-id').value;
     const name = document.getElementById('goal-name').value;
     const target = parseFloat(document.getElementById('goal-target').value || 0);
     const curr = parseFloat(document.getElementById('goal-current').value || 0);
@@ -776,23 +786,58 @@ const app = {
       return;
     }
 
+    const payload = {
+       name: name,
+       target: target,
+       current: curr,
+       scope: this.currentScope
+    };
+
     try {
-      await this.db.collection('goals').add({
-         name: name,
-         target: target,
-         current: curr,
-         scope: this.currentScope,
-         created_at: firebase.firestore.FieldValue.serverTimestamp(),
-         author_uid: this.user ? this.user.uid : 'anon'
-      });
-      this.toast('Sua Caixinha Mágica foi criada!');
+      if (id) {
+        await this.db.collection('goals').doc(id).update(payload);
+        this.toast('Caixinha atualizada!');
+      } else {
+        payload.created_at = firebase.firestore.FieldValue.serverTimestamp();
+        payload.author_uid = this.user ? this.user.uid : 'anon';
+        await this.db.collection('goals').add(payload);
+        this.toast('Sua Caixinha Mágica foi criada!');
+      }
     } catch(err) {
-      console.error("Create Goal Error:", err);
-      this.toast('Falha ao criar Caixinha: ' + (err.code || err.message), 'error');
+      console.error("Save Goal Error:", err);
+      this.toast('Falha ao salvar: ' + (err.code || err.message), 'error');
     } finally {
       this.closeModal('goal-modal');
-      e.target.reset();
       this.loadGoals();
+    }
+  },
+
+  async editGoal(id) {
+    try {
+      const doc = await this.db.collection('goals').doc(id).get();
+      if(doc.exists) {
+        const d = doc.data();
+        document.getElementById('goal-id').value = id;
+        document.getElementById('goal-name').value = d.name;
+        document.getElementById('goal-target').value = d.target;
+        document.getElementById('goal-current').value = d.current;
+        document.getElementById('goal-modal-title').textContent = 'Editar Meta';
+        this.openModal('goal-modal');
+      }
+    } catch(err) {
+      this.toast('Erro ao buscar dados da caixinha', 'error');
+    }
+  },
+
+  async deleteGoal(id) {
+    if(confirm('Tem certeza que deseja apagar esta caixinha? O dinheiro guardado nela será perdido no sistema!')) {
+      try {
+        await this.db.collection('goals').doc(id).delete();
+        this.toast('Caixinha excluída com sucesso');
+        this.loadGoals();
+      } catch(err) {
+        this.toast('Erro ao excluir caixinha', 'error');
+      }
     }
   },
 
