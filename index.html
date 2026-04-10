@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LisFinance | App Inteligente</title>
+  
+  <meta name="description" content="Controle financeiro pessoal Serverless integrado ao Firebase.">
+  <meta name="theme-color" content="#0f172a">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="css/style.css?v=MOBILE_FIX_V2">
+  
+  <!-- Chart.js para os gráficos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- FIREBASE SDKs (Versão 8 compatível para rodar sem servidor local) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+</head>
+<body class="dark-theme">
+
+  <!-- Loading Animation Overlay -->
+  <div id="loader" class="loader-overlay flex-center">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Notification System -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- App Wrapper (Auth Views) -->
+  <div id="auth-view" class="view current-view flex-center">
+    <!-- Glassmorphism Auth Card -->
+    <div class="auth-card glass-panel">
+      
+      <!-- Tema e Logo -->
+      <div class="brand">
+        <div class="logo-icon glass-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <h1 class="brand-text">Lis<span>Finance</span></h1>
+      </div>
+
+      <div class="auth-modes">
+        <button id="tab-login" class="auth-tab active" onclick="app.switchAuthMode('login')">Entrar</button>
+        <button id="tab-register" class="auth-tab" onclick="app.switchAuthMode('register')">Cadastro</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form" onsubmit="app.handleLogin(event)">
+        <div class="input-group">
+          <label>Email</label>
+          <input type="email" id="login-email" required placeholder="seu@email.com">
+        </div>
+        <div class="input-group">
+          <label>Senha</label>
+          <input type="password" id="login-password" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn-primary wave-effect">Acessar Conta</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden" onsubmit="app.handleRegister(event)">
+        <div class="input-group">
+          <label>Nome Completo</label>
+          <input type="text" id="register-name" required placeholder="João Silva">
+        </div>
+        <div class="input-group">
+          <label>Email</label>
+          <input type="email" id="register-email" required placeholder="seu@email.com">
+        </div>
+        <div class="input-group">
+          <label>Senha</label>
+          <input type="password" id="register-password" required placeholder="Crie uma senha forte (min. 6)">
+        </div>
+        <button type="submit" class="btn-primary wave-effect">Criar Conta</button>
+      </form>
+    </div>
+    
+    <!-- Background Decorators -->
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+  </div>
+
+  <!-- App Wrapper (Dashboard View) -->
+  <div id="dashboard-view" class="view hidden">
+    
+    <nav class="sidebar glass-panel">
+      <div class="sidebar-header">
+        <div class="logo-icon small-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </div>
+        <h2 class="brand-text sidebar-brand">LisFinance</h2>
+      </div>
+
+      <ul class="nav-links">
+        <li class="active"><a href="#" onclick="app.navigate('dashboard')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          Dashboard</a>
+        </li>
+        <li><a href="#" onclick="app.navigate('transactions')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          Transações</a>
+        </li>
+        <li><a href="#" onclick="app.navigate('goals')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+          Caixinhas de Metas</a>
+        </li>
+        <li><a href="#" onclick="app.navigate('profile')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          Meu Perfil</a>
+        </li>
+        <li id="nav-item-admin" class="hidden"><a href="#" onclick="app.navigate('admin')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          Administração</a>
+        </li>
+        <li><a href="#" onclick="app.toggleTheme()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          Mudar Tema</a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="avatar" id="user-avatar">?</div>
+          <div class="user-details">
+            <span id="user-name-display" class="user-name">Usuário</span>
+            <span id="user-role-display" class="user-role">Convidado</span>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="app.logout()">Sair</button>
+      </div>
+    </nav>
+    
+    <main class="main-content">
+      <header class="topbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div class="month-selector">
+          <button class="btn-icon rounded" onclick="app.changeMonth(-1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <h2 id="current-month-display">Setembro 2026</h2>
+          <button class="btn-icon rounded" onclick="app.changeMonth(1)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+        
+        <!-- Toggle Chave Pessoal / Família -->
+        <div class="scope-toggle" style="display: flex; background: var(--surface-light); padding: 5px; border-radius: 20px; border: 1px solid var(--border);">
+          <button id="scope-btn-personal" class="btn-scope active" onclick="app.setScope('PERSONAL')" style="padding: 8px 16px; border-radius: 15px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s;">👤 Pessoal</button>
+          <button id="scope-btn-family" class="btn-scope" onclick="app.setScope('FAMILY')" style="padding: 8px 16px; border-radius: 15px; border: none; background: transparent; color: var(--text-main); font-weight: bold; cursor: pointer; transition: 0.3s;">👨‍👩‍👧‍👦 Família</button>
+        </div>
+
+        <button class="btn-primary add-btn gradient-btn" onclick="app.openModal('transaction-modal')">
+          + Nova Transação
+        </button>
+      </header>
+
+      <!-- Dashboard -->
+      <div id="page-dashboard" class="page-section active">
+        <div class="summary-cards">
+          <div class="card glass-panel highlight-card total-balance-card">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+            <div class="card-info">
+              <span class="label">Saldo Atual Consolidado</span>
+              <h3 id="summary-balance">R$ 0,00</h3>
+            </div>
+          </div>
+          
+          <div class="card glass-panel income-card" onclick="app.goToFilteredTransactions('INCOME')" style="cursor:pointer" title="Ver apenas entradas">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+            </div>
+            <div class="card-info">
+              <span class="label">Entradas (Pagas) 👉</span>
+              <h3 id="summary-income" class="text-success">R$ 0,00</h3>
+            </div>
+          </div>
+          
+          <div class="card glass-panel expense-card" onclick="app.goToFilteredTransactions('EXPENSE')" style="cursor:pointer" title="Ver apenas saídas">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+            </div>
+            <div class="card-info">
+              <span class="label">Saídas (Pagas) 👉</span>
+              <h3 id="summary-expense" class="text-danger">R$ 0,00</h3>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="dashboard-chart glass-panel">
+            <h3>Despesas por Categoria</h3>
+            <div class="chart-container">
+               <canvas id="expenseChart"></canvas>
+            </div>
+          </div>
+
+          <div class="dashboard-pending glass-panel">
+            <h3>Pendências deste Mês</h3>
+            <div class="pending-stats">
+              <div class="pending-stat danger-border">
+                <span>Total A Pagar</span>
+                <strong id="summary-pending-expense">R$ 0,00</strong>
+              </div>
+              <div class="pending-stat success-border">
+                <span>A Receber (Esperado)</span>
+                <strong id="summary-pending-income">R$ 0,00</strong>
+              </div>
+            </div>
+            <h4 class="mt-4">Próximos Vencimentos</h4>
+            <div id="upcoming-bills" class="upcoming-list">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transactions -->
+      <div id="page-transactions" class="page-section hidden">
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2>Mural de Transações</h2>
+          <select id="transactions-filter" onchange="app.applyFilter(this.value)" style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-main);">
+            <option value="ALL">Todas as Movimentações</option>
+            <option value="INCOME">Apenas Entradas (Receitas)</option>
+            <option value="EXPENSE">Apenas Saídas (Despesas)</option>
+          </select>
+        </div>
+        <div class="transactions-container glass-panel">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Categoria</th>
+                  <th>Valor</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="transactions-list">
+              </tbody>
+            </table>
+          </div>
+          <div id="transactions-empty" class="empty-state hidden" style="padding: 2rem; text-align: center; color: var(--text-muted)">
+             Nenhuma transação registrada neste mês.
+          </div>
+        </div>
+      </div>
+
+      <!-- Metas e Reservas -->
+      <div id="page-goals" class="page-section hidden">
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h2>Caixinhas de Metas e Reservas</h2>
+          <button class="btn-primary gradient-btn" onclick="app.openModal('goal-modal')">+ Nova Caixinha</button>
+        </div>
+        <div class="goals-grid" id="goals-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+          <!-- Injetado por JS -->
+        </div>
+      </div>
+
+      <!-- Perfil -->
+      <div id="page-profile" class="page-section hidden">
+        <div class="page-header">
+          <h2>Meu Perfil</h2>
+        </div>
+        <div class="glass-panel" style="max-width: 500px; margin: 0 auto; padding: 2rem;">
+          <form id="profile-form" onsubmit="app.handleUpdateProfile(event)">
+            <div class="input-group full-width">
+              <label>Seu Nome Mestre</label>
+              <input type="text" id="profile-name-edit" required>
+            </div>
+            <div class="input-group full-width">
+              <label>E-mail de Acesso (Fixo)</label>
+              <input type="email" id="profile-email-edit" readonly disabled style="opacity: 0.6;">
+            </div>
+            <div class="input-group full-width" style="margin-top: 2rem;">
+              <button type="submit" class="btn-primary full-width gradient-btn">Salvar Alterações</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Admin -->
+      <div id="page-admin" class="page-section hidden">
+        <div class="page-header">
+          <h2>Painel de Administração da Família</h2>
+        </div>
+        
+        <div class="admin-grid">
+          <div class="admin-panel glass-panel">
+            <h3>Usuários Aguardando Aprovação</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">Somente usuários aprovados por você (Admin) verão e alterarão os registros.</p>
+            <div class="user-list" id="pending-users-list">
+            </div>
+          </div>
+          
+          <div class="admin-panel glass-panel">
+            <h3>Gerenciar Categorias Base</h3>
+            <form id="category-form" onsubmit="app.handleCreateCategory(event)" class="add-cat-form">
+              <div class="input-row">
+                <input type="text" id="cat-name" placeholder="Ex: Mercado" required />
+                <input type="color" id="cat-color" value="#4F46E5" />
+                <select id="cat-type">
+                  <option value="EXPENSE">Despesa</option>
+                  <option value="INCOME">Receita</option>
+                </select>
+                <button type="submit" class="btn-primary">Criar</button>
+              </div>
+            </form>
+            <div class="categories-list mt-4" id="admin-categories-list">
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- Mobile Nav (Bottom Bar) -->
+    <nav class="mobile-nav glass-panel">
+      <a href="#" onclick="app.navigate('dashboard')" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></a>
+      <a href="#" onclick="app.navigate('transactions')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></a>
+      <a href="#" class="add-btn-mobile gradient-btn" onclick="app.openModal('transaction-modal')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </a>
+      <a href="#" id="mobile-nav-admin" class="hidden" onclick="app.navigate('admin')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></a>
+      <a href="#" onclick="app.logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></a>
+    </nav>
+  </div>
+
+  <div id="transaction-modal" class="modal-overlay">
+    <div class="modal glass-panel">
+      <div class="modal-header">
+        <button type="button" class="btn-close-modal" onclick="app.closeModal('transaction-modal')">
+          &#8592; Voltar
+        </button>
+        <h3 id="modal-title">Nova Transação</h3>
+      </div>
+      <form id="transaction-form" onsubmit="app.handleTransaction(event)">
+        <input type="hidden" id="trx-id">
+        <div class="form-grid">
+          <div class="input-group full-width">
+            <label>Tipo</label>
+            <div class="type-selector">
+              <label class="radio-card">
+                <input type="radio" name="trx-type" value="EXPENSE" checked onchange="app.updateCategoryOptions()">
+                <div class="card-content expense-type">💸 Despesa (saindo dinheiro)</div>
+              </label>
+              <label class="radio-card">
+                <input type="radio" name="trx-type" value="INCOME" onchange="app.updateCategoryOptions()">
+                <div class="card-content income-type">Entrar dinheiro (Receita)</div>
+              </label>
+            </div>
+          </div>
+          <div class="input-group full-width">
+            <label>Descrição</label>
+            <input type="text" id="trx-description" required placeholder="Ex: Aluguel, Supermercado, Meu Salário...">
+          </div>
+          <div class="input-group">
+            <label>Valor (R$)</label>
+            <input type="number" id="trx-amount" step="0.01" min="0.01" required placeholder="0.00">
+          </div>
+          <div class="input-group full-width">
+            <label>Observação (Opcional)</label>
+            <input type="text" id="trx-obs" placeholder="Detalhes extras, referências, anotações...">
+          </div>
+          <div class="input-group">
+            <label>Data</label>
+            <input type="date" id="trx-date" required>
+          </div>
+          <div class="input-group">
+            <label>Categoria</label>
+            <select id="trx-category" required>
+              <option value="">-- Selecione --</option>
+              <option value="cat-moradia" data-type="EXPENSE">🏠 Moradia / Contas</option>
+              <option value="cat-alimentacao" data-type="EXPENSE">🍔 Alimentação</option>
+              <option value="cat-lazer" data-type="EXPENSE">🎮 Lazer e Passeios</option>
+              <option value="cat-transporte" data-type="EXPENSE">🚗 Transporte</option>
+              <option value="cat-saude" data-type="EXPENSE">💊 Saúde</option>
+              <option value="cat-outros-exp" data-type="EXPENSE">📦 Outros</option>
+              <option value="cat-salario" data-type="INCOME">💰 Salário / Trabalho</option>
+              <option value="cat-freelance" data-type="INCOME">💻 Freelance</option>
+              <option value="cat-outros-inc" data-type="INCOME">✨ Outras Receitas</option>
+            </select>
+          </div>
+          <div class="input-group switches">
+            <label class="switch-container">
+              <input type="checkbox" id="trx-is-paid" checked>
+              <span class="switch-slider"></span>
+              <span class="switch-label text-sm">Validar (Dinheiro já saiu/entrou na conta)</span>
+            </label>
+            <label class="switch-container">
+              <input type="checkbox" id="trx-scope-family">
+              <span class="switch-slider"></span>
+              <span class="switch-label text-sm">Despesa Compartilhada Familiar</span>
+            </label>
+            <label class="switch-container hidden">
+              <input type="checkbox" id="trx-is-fixed">
+              <span class="switch-slider"></span>
+              <span class="switch-label text-sm">Custo Fixo Mensal</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" onclick="app.closeModal('transaction-modal')">Cancelar</button>
+          <button type="submit" class="btn-primary gradient-btn">Salvar no Banco</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="goal-modal" class="modal-overlay">
+    <div class="modal glass-panel">
+      <div class="modal-header" style="justify-content: flex-start; gap: 10px;">
+        <button type="button" class="btn-icon" style="color: var(--text-main); font-weight: bold; background: var(--surface); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);" onclick="app.closeModal('goal-modal')">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><polyline points="15 18 9 12 15 6"></polyline></svg> Voltar
+        </button>
+        <h3 style="margin: 0; flex-grow: 1; text-align: center; padding-right: 80px;">Nova Meta</h3>
+      </div>
+      <form id="goal-form" onsubmit="app.handleCreateGoal(event)">
+        <div class="form-grid">
+          <div class="input-group full-width">
+            <label>Nome da Caixinha (Ex: Carro, Reserva 2026)</label>
+            <input type="text" id="goal-name" required>
+          </div>
+          <div class="input-group">
+            <label>Meta de Valor Final (R$)</label>
+            <input type="number" id="goal-target" step="0.01" min="1" required>
+          </div>
+          <div class="input-group">
+            <label>Já tenho guardado (R$)</label>
+            <input type="number" id="goal-current" step="0.01" min="0" value="0">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn-primary full-width gradient-btn">Criar Caixinha</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="deposit-modal" class="modal-overlay">
+    <div class="modal glass-panel">
+      <div class="modal-header" style="justify-content: flex-start; gap: 10px;">
+        <button type="button" class="btn-icon" style="color: var(--text-main); font-weight: bold; background: var(--surface); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);" onclick="app.closeModal('deposit-modal')">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;"><polyline points="15 18 9 12 15 6"></polyline></svg> Voltar
+        </button>
+        <h3 id="deposit-title" style="margin: 0; flex-grow: 1; text-align: center; padding-right: 80px;">Guardar Dinheiro</h3>
+      </div>
+      <form id="deposit-form" onsubmit="app.handleDeposit(event)">
+        <input type="hidden" id="deposit-goal-id">
+        <div class="form-grid">
+          <div class="input-group full-width">
+            <label>Valor a transferir pra cá (R$)</label>
+            <input type="number" id="deposit-amount" step="0.01" min="0.01" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn-primary full-width gradient-btn" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%)">Guardar Agora</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/firebase-config.js"></script>
+  <script src="js/app.js?v=FINAL_VERSION_CLEAN"></script>
+</body>
+</html>
