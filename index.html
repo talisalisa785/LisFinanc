@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="css/style.css?v=MOBILE_FIX_V3">
+  <link rel="stylesheet" href="css/style.css?v=RESPONSIVE_V4">
   
   <!-- Chart.js para os gráficos -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -85,6 +85,14 @@
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
   </div>
+
+  <!-- Hamburger button (mobile only) -->
+  <button class="hamburger" id="hamburger-btn" onclick="app.toggleSidebar()" aria-label="Menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+
+  <!-- Overlay para fechar o menu no mobile -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="app.closeSidebar()"></div>
 
   <!-- App Wrapper (Dashboard View) -->
   <div id="dashboard-view" class="view hidden">
@@ -470,6 +478,6 @@
   </div>
 
   <script src="js/firebase-config.js"></script>
-  <script src="js/app.js?v=FIX_GOALS_V1"></script>
+  <script src="js/app.js?v=RESPONSIVE_V4"></script>
 </body>
 </html>

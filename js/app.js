@@ -169,6 +169,27 @@ const app = {
     if(this.auth) this.auth.signOut();
   },
 
+  toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('active');
+    } else {
+      sidebar.classList.add('open');
+      overlay.classList.add('active');
+    }
+  },
+
+  closeSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('active');
+  },
+
   openModal(id) {
     const modal = document.getElementById(id);
     if (!modal) return;
@@ -214,6 +235,7 @@ const app = {
   },
 
   navigate(pageId) {
+    this.closeSidebar(); // fecha o menu no mobile ao navegar
     document.querySelectorAll('.nav-links li').forEach(li => li.classList.remove('active'));
     document.querySelectorAll('.mobile-nav a').forEach(a => a.classList.remove('active'));
     
