@@ -229,13 +229,10 @@ const app = {
     document.getElementById('user-role-display').textContent = this.userDoc.role === 'ADMIN' ? 'Admin Geral' : 'Membro Familiar';
     document.getElementById('user-avatar').textContent = this.userDoc.name.charAt(0).toUpperCase();
 
-    if (this.userDoc.role === 'ADMIN') {
-      document.getElementById('nav-item-admin').classList.remove('hidden');
-      document.getElementById('mobile-nav-admin').classList.remove('hidden');
-    } else {
-      document.getElementById('nav-item-admin').classList.add('hidden');
-      document.getElementById('mobile-nav-admin').classList.add('hidden');
-    }
+    // O painel de ADMIN no menu agora aparece para todos (para gerenciar categorias),
+    // mas o conteúdo interno mudará conforme o Role.
+    document.getElementById('nav-item-admin').classList.remove('hidden');
+    document.getElementById('mobile-nav-admin').classList.remove('hidden');
 
     this.updateMonthDisplay();
     await this.fetchCategories();
@@ -318,14 +315,22 @@ const app = {
   /* --- DATA FETCHING (FIREBASE) --- */
   async fetchCategories() {
     try {
-      // Puxa apenas as categorias do usuário logado
+      // 1. Buscar categorias personalizadas do usuário
       let snap = await this.db.collection('categories')
         .where('author_uid', '==', this.user.uid)
         .orderBy('name')
         .get();
       
-      // Auto-popular categorias base se o usuário não tiver nenhuma (Individual)
+      // 2. Se o usuário não tem nenhuma, vamos CLONAR as categorias globais/padrão para ele
+      // Assim cada usuário tem sua própria lista independente desde o início!
       if (snap.empty) {
+         this.toast('Preparando suas categorias personalizadas...', 'info');
+         
+         // Busca as categorias globais (antigas)
+         const globalSnap = await this.db.collection('categories')
+           .where('author_uid', '==', null)
+           .get();
+         
          const defaults = [
            { name: 'Trabalho / Salário', type: 'INCOME', color: '#10B981' },
            { name: 'Moradia / Contas', type: 'EXPENSE', color: '#6366F1' },
@@ -334,14 +339,17 @@ const app = {
            { name: 'Transporte / Uber', type: 'EXPENSE', color: '#F59E0B' },
          ];
 
-         for (const cat of defaults) {
+         // Se existirem globais, usa elas. Se não, usa o array 'defaults'.
+         const source = !globalSnap.empty ? globalSnap.docs.map(d => d.data()) : defaults;
+
+         for (const catData of source) {
            await this.db.collection('categories').add({
-             ...cat,
+             ...catData,
              author_uid: this.user.uid
            });
          }
          
-         // Atualiza a busca após popular
+         // Recarrega para pegar a nova lista
          snap = await this.db.collection('categories')
            .where('author_uid', '==', this.user.uid)
            .orderBy('name')
@@ -354,16 +362,7 @@ const app = {
       });
     } catch(e) {
       console.error("Erro ao buscar categorias:", e);
-      // Fallback local se estiver offline ou erro de permissão
-      this.categories = [
-         { id: 'catL1', name: 'Trabalho / Salário (Local)', type: 'INCOME', color: '#10B981' },
-         { id: 'catL2', name: 'Moradia / Contas (Local)', type: 'EXPENSE', color: '#6366F1' },
-         { id: 'catL3', name: 'Alimentação / iFood (Local)', type: 'EXPENSE', color: '#EF4444' },
-         { id: 'catL4', name: 'Lazer e Passeios (Local)', type: 'EXPENSE', color: '#8B5CF6' },
-         { id: 'catL5', name: 'Transporte / Uber (Local)', type: 'EXPENSE', color: '#F59E0B' },
-      ];
     }
-    
     this.updateCategoryOptions();
   },
 
@@ -694,27 +693,36 @@ const app = {
 
   /* --- ADMIN (FIREBASE) --- */
   async loadAdmin() {
-    if (this.userDoc.role !== 'ADMIN') return;
+    // Seção de Usuários só aparece para o Super Admin
+    const usersDiv = document.getElementById('pending-users-list');
+    const adminPanelUsers = document.getElementById('admin-panel-users');
     
-    try {
-      const usersSnap = await this.db.collection('users').where('approved', '==', false).get();
-      const usersDiv = document.getElementById('pending-users-list');
-      usersDiv.innerHTML = '';
-      
-      if (usersSnap.empty) {
-        usersDiv.innerHTML = '<div class="text-muted">Todos os membros familiares e convidados já foram aprovados!</div>';
-      } else {
-        usersSnap.forEach(doc => {
-          const u = doc.data();
-          usersDiv.innerHTML += `
-            <div class="user-card">
-              <div><strong>${u.name}</strong><br><small class="text-muted">${u.email}</small></div>
-              <button class="btn-primary" onclick="app.approveUser('${doc.id}')">Aprovar Convite</button>
-            </div>
-          `;
-        });
-      }
+    if (this.userDoc.role === 'ADMIN') {
+      if(adminPanelUsers) adminPanelUsers.classList.remove('hidden');
+      try {
+        const usersSnap = await this.db.collection('users').where('approved', '==', false).get();
+        usersDiv.innerHTML = '';
+        
+        if (usersSnap.empty) {
+          usersDiv.innerHTML = '<div class="text-muted">Nenhum convite pendente.</div>';
+        } else {
+          usersSnap.forEach(doc => {
+            const u = doc.data();
+            usersDiv.innerHTML += `
+              <div class="user-card">
+                <div><strong>${u.name}</strong><br><small class="text-muted">${u.email}</small></div>
+                <button class="btn-primary" onclick="app.approveUser('${doc.id}')">Aprovar</button>
+              </div>
+            `;
+          });
+        }
+      } catch(e) {}
+    } else {
+      if(adminPanelUsers) adminPanelUsers.classList.add('hidden');
+    }
 
+    // Seção de Categorias aparece para TODOS (mas cada um verá apenas as suas devido ao fetchCategories)
+    try {
       const catDiv = document.getElementById('admin-categories-list');
       catDiv.innerHTML = '';
       this.categories.forEach(c => {
@@ -754,6 +762,9 @@ const app = {
   },
   
   async delCat(id) {
+     const cat = this.categories.find(c => c.id === id);
+     if (!cat) return;
+     
      if(confirm('Tem certeza? Isso fará as transações antigas perderem a cor.')) {
         await this.db.collection('categories').doc(id).delete();
         await this.fetchCategories(); 
