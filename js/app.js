@@ -60,6 +60,12 @@ const app = {
           const docRef = await this.db.collection('users').doc(user.uid).get();
           if(docRef.exists) {
             this.userDoc = docRef.data();
+            // Migração: garantir que family_id existe
+            if(!this.userDoc.family_id) {
+               this.userDoc.family_id = user.uid; // Por padrão, a família é ele mesmo
+               await this.db.collection('users').doc(user.uid).update({ family_id: user.uid });
+            }
+
             if(this.userDoc.approved === false) {
                this.auth.signOut();
                this.toast('Sua conta ainda não foi aprovada.', 'error');
@@ -70,15 +76,16 @@ const app = {
           } else {
             // Conta fantasma ou primeira vez (Recuperação)
             const nomeMascara = user.email.split('@')[0].toUpperCase();
-            await this.db.collection('users').doc(user.uid).set({
+            const userData = {
               name: nomeMascara,
               email: user.email,
               role: 'ADMIN',
               approved: true,
+              family_id: user.uid, // Inicializa com o próprio UID
               created_at: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            const novoDoc = await this.db.collection('users').doc(user.uid).get();
-            this.userDoc = novoDoc.data();
+            };
+            await this.db.collection('users').doc(user.uid).set(userData);
+            this.userDoc = userData;
             this.toast('Conta super Admin sincronizada!', 'success');
             this.setupDashboard();
           }
@@ -131,6 +138,7 @@ const app = {
         email: email,
         role: isSuperAdmin ? 'ADMIN' : 'USER',
         approved: true, // Liberação total do App pra todos pedida pela Karine
+        family_id: cred.user.uid, // Cada um começa com sua própria família individual
         created_at: firebase.firestore.FieldValue.serverTimestamp()
       });
 
@@ -310,18 +318,34 @@ const app = {
   /* --- DATA FETCHING (FIREBASE) --- */
   async fetchCategories() {
     try {
-      let snap = await this.db.collection('categories').orderBy('name').get();
+      // Puxa apenas as categorias do usuário logado
+      let snap = await this.db.collection('categories')
+        .where('author_uid', '==', this.user.uid)
+        .orderBy('name')
+        .get();
       
-      // Auto-popular categorias base se o banco estiver vazio (Facilitador)
+      // Auto-popular categorias base se o usuário não tiver nenhuma (Individual)
       if (snap.empty) {
-         await this.db.collection('categories').add({ name: 'Trabalho / Salário', type: 'INCOME', color: '#10B981' });
-         await this.db.collection('categories').add({ name: 'Moradia / Contas', type: 'EXPENSE', color: '#6366F1' });
-         await this.db.collection('categories').add({ name: 'Alimentação / iFood', type: 'EXPENSE', color: '#EF4444' });
-         await this.db.collection('categories').add({ name: 'Lazer e Passeios', type: 'EXPENSE', color: '#8B5CF6' });
-         await this.db.collection('categories').add({ name: 'Transporte / Uber', type: 'EXPENSE', color: '#F59E0B' });
+         const defaults = [
+           { name: 'Trabalho / Salário', type: 'INCOME', color: '#10B981' },
+           { name: 'Moradia / Contas', type: 'EXPENSE', color: '#6366F1' },
+           { name: 'Alimentação / iFood', type: 'EXPENSE', color: '#EF4444' },
+           { name: 'Lazer e Passeios', type: 'EXPENSE', color: '#8B5CF6' },
+           { name: 'Transporte / Uber', type: 'EXPENSE', color: '#F59E0B' },
+         ];
+
+         for (const cat of defaults) {
+           await this.db.collection('categories').add({
+             ...cat,
+             author_uid: this.user.uid
+           });
+         }
          
-         // Atualiza a busca
-         snap = await this.db.collection('categories').orderBy('name').get();
+         // Atualiza a busca após popular
+         snap = await this.db.collection('categories')
+           .where('author_uid', '==', this.user.uid)
+           .orderBy('name')
+           .get();
       }
 
       this.categories = [];
@@ -329,7 +353,8 @@ const app = {
          this.categories.push({ id: doc.id, ...doc.data() });
       });
     } catch(e) {
-      // FIREBASE CAIU/BLOQUEADO: Usa banco de emergência para o site não ficar vazio!
+      console.error("Erro ao buscar categorias:", e);
+      // Fallback local se estiver offline ou erro de permissão
       this.categories = [
          { id: 'catL1', name: 'Trabalho / Salário (Local)', type: 'INCOME', color: '#10B981' },
          { id: 'catL2', name: 'Moradia / Contas (Local)', type: 'EXPENSE', color: '#6366F1' },
@@ -339,7 +364,6 @@ const app = {
       ];
     }
     
-    // Atualiza as opções do HTML independe se veio da nuvem ou do local
     this.updateCategoryOptions();
   },
 
@@ -401,8 +425,8 @@ const app = {
              results.push({ id: doc.id, ...data });
           }
        } else {
-          // FAMILIA: Mostra tudo marcado como família por qualquer membro
-          if (ds === 'FAMILY') {
+          // FAMILIA: Mostra apenas se o usuário pertencer à mesma família (family_id)
+          if (ds === 'FAMILY' && data.family_id === this.userDoc.family_id) {
              results.push({ id: doc.id, ...data });
           }
        }
@@ -624,7 +648,8 @@ const app = {
       type, description, amount, date, category_id, is_paid, is_fixed, obs,
       author_uid: this.user.uid,
       author_name: this.userDoc.name,
-      scope: isFamily ? 'FAMILY' : 'PERSONAL'
+      scope: isFamily ? 'FAMILY' : 'PERSONAL',
+      family_id: this.userDoc.family_id // Salva o family_id atual para transações compartilhadas
     };
 
     try {
@@ -719,7 +744,7 @@ const app = {
     const type = document.getElementById('cat-type').value;
 
     try {
-      await this.db.collection('categories').add({ name, color, type });
+      await this.db.collection('categories').add({ name, color, type, author_uid: this.user.uid });
       this.toast('Categoria criada e sincronizada');
       await this.fetchCategories(); 
       this.loadAdmin();
@@ -755,7 +780,11 @@ const app = {
   /* --- CAIXINHAS / METAS --- */
   async loadGoals() {
     try {
-      const snap = await this.db.collection('goals').where('scope', '==', this.currentScope).orderBy('created_at', 'desc').get();
+      // Cada um vê apenas suas próprias caixinhas
+      const snap = await this.db.collection('goals')
+        .where('author_uid', '==', this.user.uid)
+        .orderBy('created_at', 'desc')
+        .get();
       const list = document.getElementById('goals-list');
       list.innerHTML = '';
       
@@ -891,6 +920,50 @@ const app = {
     } catch(err) {
       console.error("Deposit Error:", err);
       this.toast('Falha ao Guardar Dinheiro: ' + (err.message || 'Erro'), 'error');
+    }
+  },
+
+  /* --- FAMILY LINKING SYSTEM --- */
+  async handleLinkFamily() {
+    const code = prompt("Digite o Código de Vínculo da outra pessoa (o ID dela) para se unirem:");
+    if (!code || code.trim() === "") return;
+
+    try {
+      this.toast("Tentando vincular...");
+      // Buscar se o usuário do código existe
+      const targetDoc = await this.db.collection('users').doc(code).get();
+      if (!targetDoc.exists) {
+        this.toast("Código inválido ou usuário não encontrado.", "error");
+        return;
+      }
+
+      const targetData = targetDoc.data();
+      const newFamilyId = targetData.family_id || code;
+
+      // Vincular o usuário atual ao family_id do alvo
+      await this.db.collection('users').doc(this.user.uid).update({
+        family_id: newFamilyId
+      });
+
+      this.userDoc.family_id = newFamilyId;
+      this.toast("Sucesso! Famílias vinculadas. Agora vocês compartilham transações de família.", "success");
+      this.loadDashboard();
+    } catch (e) {
+      this.toast("Erro ao vincular: " + e.message, "error");
+    }
+  },
+
+  copyFamilyCode() {
+    const code = this.user.uid;
+    // Tenta usar a API da área de transferência moderna, senão cai pro prompt
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(code).then(() => {
+        this.toast("Seu Código de Vínculo foi copiado! Mande para seu familiar.");
+      }).catch(() => {
+        prompt("Copie seu código abaixo:", code);
+      });
+    } else {
+      prompt("Copie seu código abaixo:", code);
     }
   }
 

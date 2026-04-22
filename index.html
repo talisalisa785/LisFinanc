@@ -288,10 +288,27 @@
               <label>E-mail de Acesso (Fixo)</label>
               <input type="email" id="profile-email-edit" readonly disabled style="opacity: 0.6;">
             </div>
-            <div class="input-group full-width" style="margin-top: 2rem;">
+            <div class="input-group full-width" style="margin-top: 1rem;">
               <button type="submit" class="btn-primary full-width gradient-btn">Salvar Alterações</button>
             </div>
           </form>
+
+          <div class="family-linking" style="margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border);">
+            <h3 style="margin-bottom: 10px; font-size: 1.1rem;">👨‍👩‍👧‍👦 Vínculo Familiar</h3>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">Vincule-se a outra pessoa para compartilhar as transações marcadas como "Família".</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <button onclick="app.copyFamilyCode()" class="btn-secondary full-width" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                Copiar Meu Código
+              </button>
+              
+              <button onclick="app.handleLinkFamily()" class="btn-primary full-width gradient-btn" style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                Vincular a uma Família
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
