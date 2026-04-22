@@ -541,10 +541,17 @@ const app = {
         filteredTxs.forEach(t => {
           // Busca a categoria pelo ID ou tenta encontrar pelo nome se o ID não bater
           let cat = this.categories.find(c => c.id === t.category_id);
+          
           if (!cat && t.category_id) {
-             // Fallback para IDs antigos ou nomes puros
-             cat = this.categories.find(c => c.id.includes(t.category_id) || t.category_id.includes(c.id));
+             // TENTA O SEGUNDO MATCH: Se o t.category_id for um nome (ex: "Alimentação") ou um ID antigo (ex: "cat-moradia")
+             // vamos comparar com o nome da categoria atual para tentar traduzir.
+             cat = this.categories.find(c => 
+               c.id.includes(t.category_id) || 
+               t.category_id.includes(c.id) ||
+               c.name.toLowerCase().includes(t.category_id.toLowerCase())
+             );
           }
+          
           const categoryName = cat ? cat.name : (t.category_id || 'Sem Categoria');
           const categoryColor = cat ? cat.color : '#888';
 
