@@ -315,21 +315,39 @@ const app = {
   /* --- DATA FETCHING (FIREBASE) --- */
   async fetchCategories() {
     try {
-      // 1. Buscar categorias personalizadas do usuário
-      let snap = await this.db.collection('categories')
-        .where('author_uid', '==', this.user.uid)
-        .orderBy('name')
-        .get();
+      // 1. Busca todas as categorias para podermos resgatar as antigas (legado) e contornar a falta de índice
+      const allCatsSnap = await this.db.collection('categories').get();
       
-      // 2. Se o usuário não tem nenhuma, vamos CLONAR as categorias globais/padrão para ele
-      // Assim cada usuário tem sua própria lista independente desde o início!
-      if (snap.empty) {
-         this.toast('Preparando suas categorias personalizadas...', 'info');
+      this.categories = [];
+      let userHasOwnCats = false;
+      let batch = this.db.batch();
+      let migrationCount = 0;
+
+      allCatsSnap.forEach(doc => {
+         const d = doc.data();
          
-         // Busca as categorias globais (antigas)
-         const globalSnap = await this.db.collection('categories')
-           .where('author_uid', '==', null)
-           .get();
+         // Categoria já pertence ao usuário
+         if (d.author_uid === this.user.uid) {
+            userHasOwnCats = true;
+            this.categories.push({ id: doc.id, ...d });
+         } 
+         // Categoria antiga (legado, sem dono). Se for Admin, assume a posse para não perder o histórico!
+         else if (!d.author_uid && this.userDoc.role === 'ADMIN') {
+            batch.update(doc.ref, { author_uid: this.user.uid });
+            this.categories.push({ id: doc.id, ...d, author_uid: this.user.uid });
+            migrationCount++;
+            userHasOwnCats = true; // Agora ele tem
+         }
+      });
+
+      // Salva a migração no banco se encontrou categorias órfãs
+      if (migrationCount > 0) {
+         await batch.commit();
+      }
+      
+      // 2. Se o usuário não tem nenhuma (nem antiga, nem nova), cria as iniciais
+      if (!userHasOwnCats) {
+         this.toast('Preparando suas categorias personalizadas...', 'info');
          
          const defaults = [
            { name: 'Trabalho / Salário', type: 'INCOME', color: '#10B981' },
@@ -339,27 +357,18 @@ const app = {
            { name: 'Transporte / Uber', type: 'EXPENSE', color: '#F59E0B' },
          ];
 
-         // Se existirem globais, usa elas. Se não, usa o array 'defaults'.
-         const source = !globalSnap.empty ? globalSnap.docs.map(d => d.data()) : defaults;
-
-         for (const catData of source) {
-           await this.db.collection('categories').add({
+         for (const catData of defaults) {
+           const newCatRef = await this.db.collection('categories').add({
              ...catData,
              author_uid: this.user.uid
            });
+           this.categories.push({ id: newCatRef.id, ...catData, author_uid: this.user.uid });
          }
-         
-         // Recarrega para pegar a nova lista
-         snap = await this.db.collection('categories')
-           .where('author_uid', '==', this.user.uid)
-           .orderBy('name')
-           .get();
       }
-
-      this.categories = [];
-      snap.forEach(doc => {
-         this.categories.push({ id: doc.id, ...doc.data() });
-      });
+      
+      // Ordenação local (Client-side)
+      this.categories.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      
     } catch(e) {
       console.error("Erro ao buscar categorias:", e);
     }
@@ -801,7 +810,6 @@ const app = {
       // Cada um vê apenas suas próprias caixinhas
       const snap = await this.db.collection('goals')
         .where('author_uid', '==', this.user.uid)
-        .orderBy('created_at', 'desc')
         .get();
       const list = document.getElementById('goals-list');
       list.innerHTML = '';
@@ -811,16 +819,27 @@ const app = {
          return;
       }
 
+      let goals = [];
       snap.forEach(doc => {
-         const d = doc.data();
+         goals.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Ordenação local (descendente)
+      goals.sort((a, b) => {
+         const dateA = a.created_at ? (typeof a.created_at.toDate === 'function' ? a.created_at.toDate().getTime() : new Date(a.created_at).getTime()) : 0;
+         const dateB = b.created_at ? (typeof b.created_at.toDate === 'function' ? b.created_at.toDate().getTime() : new Date(b.created_at).getTime()) : 0;
+         return dateB - dateA;
+      });
+
+      goals.forEach(d => {
          const perc = Math.min(100, Math.max(0, (d.current / d.target) * 100)).toFixed(1);
          const isDone = perc >= 100;
          list.innerHTML += `
            <div class="card glass-panel" style="display: flex; flex-direction: column; justify-content: space-between; border-top: 4px solid ${isDone ? 'var(--success)' : 'var(--primary)'}">
              <div style="position: relative;">
                <div style="position: absolute; top: -5px; right: -5px; display: flex; gap: 5px;">
-                 <button class="btn-icon" onclick="app.editGoal('${doc.id}')" title="Editar Meta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
-                 <button class="btn-icon" onclick="app.deleteGoal('${doc.id}')" title="Excluir Meta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--danger)" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                 <button class="btn-icon" onclick="app.editGoal('${d.id}')" title="Editar Meta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
+                 <button class="btn-icon" onclick="app.deleteGoal('${d.id}')" title="Excluir Meta"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--danger)" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                </div>
                <h3 style="margin-bottom: 5px">${d.name}</h3>
                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">
@@ -833,7 +852,7 @@ const app = {
                <h3 class="text-success" style="font-size: 1.5rem">R$ ${d.current.toFixed(2)} acumulado</h3>
              </div>
              <div style="margin-top: 1rem; display: flex; gap: 10px;">
-                <button class="btn-primary gradient-btn full-width" onclick="app.openDepositModal('${doc.id}', '${d.name}')">Guardar +</button>
+                <button class="btn-primary gradient-btn full-width" onclick="app.openDepositModal('${d.id}', '${d.name}')">Guardar +</button>
              </div>
            </div>
          `;
